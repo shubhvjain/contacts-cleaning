@@ -1,0 +1,133 @@
+<!-- The `multiple` attribute lets users select multiple files. -->
+<input type="file" id="file-selector" accept="text/csv">
+<script src="https://unpkg.com/libphonenumber-js@^1.7.6/bundle/libphonenumber-max.js"></script>
+
+<script>
+  const fileSelector = document.getElementById('file-selector');
+  fileSelector.addEventListener('change', (event) => {
+    const fileList = event.target.files;
+    // console.log(fileList);
+    readImage(fileList[0])
+  });
+
+
+  function readImage(file) {
+
+    const reader = new FileReader();
+    reader.addEventListener('load', (event) => {
+      let contacts = csvTextToJSON(event.target.result);
+      let refined = refineContacts(contacts)
+      let csvString = convertToCsvString(refined)
+      saveCSV(csvString)
+    });
+    reader.readAsText(file);
+  }
+
+  function csvTextToJSON(csvText) {
+    var lines = csvText.split("\n");
+    var result = [];
+    let headers = lines[0].split(",");
+    for (var i = 0; i < headers.length; i++) {
+      headers[i] = headers[i].replaceAll(" ", "")
+    }
+    for (var i = 1; i < lines.length; i++) {
+      var obj = {};
+      var currentline = lines[i].split(",");
+
+      for (var j = 0; j < headers.length; j++) {
+        obj[headers[j]] = currentline[j];
+      }
+      result.push(obj);
+
+    }
+    return result
+    // console.log(result)
+  }
+
+  function refineContacts(contacts) {
+    let ref = [];
+    let cfields = ["Phone1", "Phone2", "Phone3", "Phone4"]
+    contacts.map(itm => {
+      // console.log(itm)
+      // let name = itm["Name"]  // .trim().replaceAll(","," "),
+      let ct = {
+        name:itm["Name"],
+        contacts: [],
+        uCount: 0,
+        dCount: 0,
+        orignal: ''
+      }
+      cfields.map(fl => {
+        let st = itm[fl + "-Value"]
+        if (st) {
+
+          ct.orignal += " :: " + itm[fl + "-Type"] + " = " + st
+          if (st.trim().length > 0) {
+
+
+            let cts = st.split(":::")
+            cts.map(cont => {
+              let a = cont.trim().replaceAll("-", "")
+              // console.log(a)
+              //  let vCont = new libphonenumber.AsYouType('IN').input(a)
+
+              const phoneNumber = libphonenumber.parsePhoneNumberFromString(a, 'IN')
+              if (phoneNumber) {
+                // console.log(phoneNumber.formatNational())
+                let d = phoneNumber.formatNational()
+                let b = {
+                  value: d,
+                  type: itm[fl + "-Type"]
+                }
+                let c = ct.contacts.findIndex(i => {
+                  return i['value'] == d
+                })
+                if (c == -1) {
+                  ct.contacts.push(b)
+                  ct.uCount++
+                } else {
+                  // console.log("duplicate")
+                  ct.dCount++
+                }
+              }
+
+              // ct.contacts.push(vCont)
+            })
+          }
+        }
+      })
+      // console.log(ct)
+      ref.push(ct)
+    })
+    return ref
+  }
+
+  function convertToCsvString(refined) {
+    let rows = [['Name']]
+    refined.map(itm => {
+      // console.log(itm)
+      let str = []
+      str.push(itm.name.replaceAll(',','-'))
+      itm.contacts.map(ct => {
+        str.push(ct.type);
+        str.push(ct.value);
+      })
+      rows.push(str)
+    })
+    // console.log(rows)
+    let csvContent = "data:text/csv;charset=utf-8," +
+      rows.map(e => e.join(",")).join("\n");
+    return csvContent
+  }
+
+  function saveCSV(csvContent) {
+    var encodedUri = encodeURI(csvContent);
+    var link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "refined_contacts.csv");
+    document.body.appendChild(link); // Required for FF
+
+    link.click(); // This will download the data file named "my_data.csv".
+  }
+
+</script>
